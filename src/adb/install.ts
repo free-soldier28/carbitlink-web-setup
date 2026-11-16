@@ -12,6 +12,26 @@ export interface InstallProgress {
   totalBytes: number;
 }
 
+// Output format differs across Android versions, e.g.:
+// "Success: [123]" (older) or "Success: created install session [123]" (newer).
+export function parseCreateSessionId(output: string): string {
+  if (!/Success/i.test(output)) {
+    throw new Error(`install-create failed: ${output.trim()}`);
+  }
+  const match = output.match(/\[(\d+)\]/);
+  if (!match) {
+    throw new Error(`install-create: no session id in output: ${output.trim()}`);
+  }
+  return match[1];
+}
+
+// `pm install-write` / `pm install-commit` answer plain "Success" on OK.
+export function assertPmSuccess(output: string, step: string): void {
+  if (!/Success/i.test(output)) {
+    throw new Error(`${step} failed: ${output.trim()}`);
+  }
+}
+
 // Install an APK File with Play Store attribution, reporting upload progress.
 export async function installApk(
   adb: Adb,
@@ -24,16 +44,7 @@ export async function installApk(
     adb,
     'pm install-create -r -i com.android.vending',
   );
-  // output format differs across Android versions, e.g.:
-  // "Success: [123]" or "Success: created install session [123]"
-  if (!/Success/i.test(createOut)) {
-    throw new Error(`install-create failed: ${createOut.trim()}`);
-  }
-  const match = createOut.match(/\[(\d+)\]/);
-  if (!match) {
-    throw new Error(`install-create: no session id in output: ${createOut.trim()}`);
-  }
-  const sessionId = match[1];
+  const sessionId = parseCreateSessionId(createOut);
 
   // `pm install-write -S <size> <session> base -` reads the APK from stdin.
   const write = await spawnStream(
@@ -64,16 +75,16 @@ export async function installApk(
     writeOut += new TextDecoder().decode(value);
   }
   await write.exited;
-  if (!/Success/.test(writeOut)) {
+  try {
+    assertPmSuccess(writeOut, 'install-write');
+  } catch (e) {
     await abandonSession(adb, sessionId);
-    throw new Error(`install-write failed: ${writeOut.trim()}`);
+    throw e;
   }
 
   onProgress({ phase: 'commit', uploadedBytes: apk.size, totalBytes: apk.size });
   const commitOut = await shellText(adb, `pm install-commit ${sessionId}`);
-  if (!/Success/.test(commitOut)) {
-    throw new Error(`install-commit failed: ${commitOut.trim()}`);
-  }
+  assertPmSuccess(commitOut, 'install-commit');
 }
 
 async function abandonSession(adb: Adb, sessionId: string): Promise<void> {

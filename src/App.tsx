@@ -246,7 +246,7 @@ export default function App() {
         />
         {apk && (
           <p className="hint">
-            {apk.name} · {(apk.size / 1024 / 1024).toFixed(1)} МБ{' '}
+            {apk.name} · {(apk.size / 1024 / 1024).toFixed(1)} {t.mb}{' '}
             {client
               ? <span className="ok">{t.recognizedAs} {client.name}</span>
               : <span className="warn">{t.notRecognized}</span>}

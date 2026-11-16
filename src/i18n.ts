@@ -25,8 +25,9 @@ export function saveLang(lang: Lang): void {
 
 const RU = {
   title: 'Carbitlink/Yilian Web Setup',
-  h1: 'Установка с компьютера',
-  lead: 'Подключите телефон кабелем, включите «Отладку по USB», выберите APK — ' +
+  h1: 'Установка приложения через браузер',
+  lead: 'Подключите телефон кабелем к этому устройству (компьютер или второй ' +
+        'телефон по OTG), включите «Отладку по USB», выберите APK — ' +
         'программа сама установит его и выдаст все права.',
   bannerUnsupported: 'Ваш браузер не поддерживает WebUSB. Откройте страницу в Chrome или Edge на компьютере.',
   stepPhone: '1 · Телефон',
@@ -40,6 +41,7 @@ const RU = {
   buttonInstall: 'Установить и настроить',
   bannerDone: 'Готово! Подключите телефон к магнитоле. Повторный запуск безопасен.',
   logSummary: 'Технический лог',
+  mb: 'МБ',
   toggleTheme: 'Переключить тему',
   errDeviceBusy: 'Устройство занято другой программой (например, adb на ПК — setup.bat, VS Code и т.п.). Закройте её и нажмите «Подключить телефон» ещё раз.',
   errConnect: 'Не удалось подключиться к телефону',
@@ -61,8 +63,9 @@ type Dict = typeof RU;
 
 const EN: Dict = {
   title: 'Carbitlink/Yilian Web Setup',
-  h1: 'Install from your computer',
-  lead: 'Connect the phone with a cable, enable "USB debugging", pick the APK — ' +
+  h1: 'Install the app from your browser',
+  lead: 'Connect the phone with a cable to this device (a computer, or another ' +
+        'phone via OTG), enable "USB debugging", pick the APK — ' +
         'the app will install it and grant all permissions for you.',
   bannerUnsupported: 'Your browser does not support WebUSB. Open this page in Chrome or Edge on a computer.',
   stepPhone: '1 · Phone',
@@ -76,6 +79,7 @@ const EN: Dict = {
   buttonInstall: 'Install and configure',
   bannerDone: 'Done! Connect the phone to the head unit. Re-running is safe.',
   logSummary: 'Technical log',
+  mb: 'MB',
   toggleTheme: 'Toggle theme',
   errDeviceBusy: 'The device is used by another program (e.g. adb on the PC — setup.bat, VS Code, etc.). Close it and press "Connect phone" again.',
   errConnect: 'Failed to connect to the phone',
