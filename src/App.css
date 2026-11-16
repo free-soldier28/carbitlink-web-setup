@@ -1,0 +1,93 @@
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #1b1a18;
+  background: #f3f2f1;
+}
+
+* { box-sizing: border-box; }
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.kicker {
+  color: #2f8eae;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+h1 { font-size: 26px; margin: 4px 0 6px; }
+
+.lead { color: #838179; margin: 0 0 20px; line-height: 1.5; }
+
+.card {
+  background: #edebe8;
+  border: 1px solid #d5d2c8;
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.card h2 { font-size: 15px; margin: 0 0 10px; }
+
+button {
+  font: inherit;
+  padding: 9px 18px;
+  border-radius: 6px;
+  border: 1px solid #d5d2c8;
+  background: #fff;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary {
+  background: #2f8eae;
+  color: #fff;
+  border-color: #2f8eae;
+  font-weight: 600;
+}
+
+.hint { color: #838179; font-size: 13px; line-height: 1.5; margin: 8px 0 0; }
+.ok { color: #2e7d32; font-weight: 600; }
+.warn { color: #b26a00; font-weight: 600; }
+
+.device { font-size: 15px; }
+
+.banner {
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+.banner-ok { background: #e6f4e7; border: 1px solid #a5d6a7; }
+.banner-error { background: #fdecea; border: 1px solid #f5b7b1; }
+
+.progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.progress .bar {
+  flex: 1; height: 10px; border-radius: 5px;
+  background: #d5d2c8; overflow: hidden;
+}
+.progress .bar div { height: 100%; background: #2f8eae; transition: width 0.2s; }
+.progress span { font-size: 13px; color: #838179; }
+
+.steps { list-style: none; padding: 0; margin: 12px 0 0; font-size: 14px; }
+.steps li { padding: 3px 0; }
+.steps li .mark { display: inline-block; width: 20px; }
+.steps li.ok .mark { color: #2e7d32; }
+.steps li.warn .mark { color: #b26a00; }
+.steps li.error .mark { color: #c62828; }
+.steps li.running .mark { color: #2f8eae; }
+.steps .detail { color: #838179; }
+
+.log {
+  border: 1px solid #d5d2c8;
+  border-radius: 8px;
+  background: #1b1a18;
+  color: #cfcfc5;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+.log summary { padding: 8px 14px; cursor: pointer; }
+.log div { max-height: 200px; overflow-y: auto; padding: 0 14px 10px; }
