@@ -40,6 +40,7 @@ const RU = {
   buttonInstall: 'Установить и настроить',
   bannerDone: 'Готово! Подключите телефон к магнитоле. Повторный запуск безопасен.',
   logSummary: 'Технический лог',
+  toggleTheme: 'Переключить тему',
   steps: [
     'Установка APK (атрибуция Play Store)',
     'Разрешения (микрофон, гео, уведомления...)',
@@ -73,6 +74,7 @@ const EN: Dict = {
   buttonInstall: 'Install and configure',
   bannerDone: 'Done! Connect the phone to the head unit. Re-running is safe.',
   logSummary: 'Technical log',
+  toggleTheme: 'Toggle theme',
   steps: [
     'Install APK (Play Store attribution)',
     'Permissions (microphone, location, notifications...)',

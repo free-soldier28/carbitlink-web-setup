@@ -20,6 +20,7 @@ import {
 } from './adb/grants';
 import { detectClient, type ClientDef } from './clients';
 import { detectLang, saveLang, STRINGS, type Lang } from './i18n';
+import { detectTheme, saveTheme, type Theme } from './theme';
 import './App.css';
 
 // Technical log lines are English; all user-facing UI strings come from i18n.
@@ -34,6 +35,11 @@ interface StepState {
 export default function App() {
   const [lang, setLang] = useState<Lang>(detectLang);
   const t = STRINGS[lang];
+  const [theme, setTheme] = useState<Theme>(detectTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     document.title = t.title;
@@ -178,6 +184,16 @@ export default function App() {
         <div className="header-row">
           <div className="kicker">CARBITLINK · YILIAN</div>
           <div className="lang-switch">
+            <div className="theme-switch">
+              {(['light', 'dark'] as Theme[]).map((th) => (
+                <button key={th}
+                  className={th === theme ? 'theme active' : 'theme'}
+                  title={t.toggleTheme}
+                  onClick={() => { setTheme(th); saveTheme(th); }}>
+                  {th === 'light' ? '☀' : '🌙'}
+                </button>
+              ))}
+            </div>
             {(['ru', 'en'] as Lang[]).map((l) => (
               <button key={l}
                 className={l === lang ? 'lang active' : 'lang'}
