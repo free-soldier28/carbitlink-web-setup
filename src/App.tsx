@@ -55,8 +55,17 @@ export default function App() {
   const [steps, setSteps] = useState<StepState[]>([]);
   const [upload, setUpload] = useState({ done: 0, total: 0 });
   const [log, setLog] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Map common connection failures to a friendly localized hint;
+  // unknown errors fall back to the raw message.
+  const formatConnectError = useCallback((e: unknown): string => {
+    const raw = String(e);
+    if (/already in use|busy/i.test(raw)) return `${t.errDeviceBusy} [${raw}]`;
+    return `${t.errConnect}: ${raw}`;
+  }, [t]);
 
   const addLog = useCallback((line: string) => {
     setLog((prev) => [...prev, line]);
@@ -67,7 +76,7 @@ export default function App() {
   }, [log]);
 
   const pickDevice = useCallback(async () => {
-    setError(null);
+    setConnectError(null);
     try {
       const usbDevice = (await requestDevice()) ?? (await getDevices())[0];
       if (!usbDevice) return;
@@ -77,10 +86,10 @@ export default function App() {
       setDevice(info);
       addLog(`device connected: ${info.model} (Android ${info.androidVersion})`);
     } catch (e) {
-      setError(String(e));
+      setConnectError(formatConnectError(e));
       addLog(`connect failed: ${e}`);
     }
-  }, [addLog]);
+  }, [addLog, formatConnectError]);
 
   const onApkChange = useCallback((file: File | null) => {
     setApk(file);
@@ -101,7 +110,7 @@ export default function App() {
   const run = useCallback(async () => {
     if (!adb || !apk || !client) return;
     setPhase('working');
-    setError(null);
+    setInstallError(null);
     setUpload({ done: 0, total: apk.size });
     setSteps(t.steps.map(() => ({ status: 'pending' as const })));
 
@@ -170,7 +179,7 @@ export default function App() {
     } catch (e) {
       const stepIndex = steps.findIndex((s) => s.status === 'running');
       if (stepIndex >= 0) setStep(stepIndex, 'error', String(e));
-      setError(String(e));
+      setInstallError(String(e));
       setPhase('error');
       addLog(`error: ${e}`);
     }
@@ -221,6 +230,9 @@ export default function App() {
               {t.buttonConnect}
             </button>
             <p className="hint">{t.hintConnect}</p>
+            {connectError && (
+              <div className="banner banner-error">{connectError}</div>
+            )}
           </div>
         )}
       </section>
@@ -278,7 +290,7 @@ export default function App() {
         )}
 
         {phase === 'done' && <div className="banner banner-ok">{t.bannerDone}</div>}
-        {error && <div className="banner banner-error">{error}</div>}
+        {installError && <div className="banner banner-error">{installError}</div>}
       </section>
 
       <details className="log">

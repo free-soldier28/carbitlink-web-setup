@@ -41,6 +41,8 @@ const RU = {
   bannerDone: 'Готово! Подключите телефон к магнитоле. Повторный запуск безопасен.',
   logSummary: 'Технический лог',
   toggleTheme: 'Переключить тему',
+  errDeviceBusy: 'Устройство занято другой программой (например, adb на ПК — setup.bat, VS Code и т.п.). Закройте её и нажмите «Подключить телефон» ещё раз.',
+  errConnect: 'Не удалось подключиться к телефону',
   steps: [
     'Установка APK (атрибуция Play Store)',
     'Разрешения (микрофон, гео, уведомления...)',
@@ -75,6 +77,8 @@ const EN: Dict = {
   bannerDone: 'Done! Connect the phone to the head unit. Re-running is safe.',
   logSummary: 'Technical log',
   toggleTheme: 'Toggle theme',
+  errDeviceBusy: 'The device is used by another program (e.g. adb on the PC — setup.bat, VS Code, etc.). Close it and press "Connect phone" again.',
+  errConnect: 'Failed to connect to the phone',
   steps: [
     'Install APK (Play Store attribution)',
     'Permissions (microphone, location, notifications...)',
