@@ -20,11 +20,16 @@ describe('detectLang', () => {
     expect(detectLang()).toBe('en');
   });
 
-  it('detects Russian from the browser languages list', () => {
-    stubNavigator(['en-US', 'ru']);
-    expect(detectLang()).toBe('ru');
+  it('detects Russian when it is the first language', () => {
     stubNavigator(['ru-RU', 'en-US']);
     expect(detectLang()).toBe('ru');
+    stubNavigator(['ru']);
+    expect(detectLang()).toBe('ru');
+  });
+
+  it('uses the first supported language even if Russian comes later', () => {
+    stubNavigator(['en-US', 'ru']);
+    expect(detectLang()).toBe('en');
   });
 
   it('detects English as the first language', () => {
