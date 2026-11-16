@@ -24,9 +24,14 @@ export async function installApk(
     adb,
     'pm install-create -r -i com.android.vending',
   );
-  const match = createOut.match(/Success:\s*\[(\d+)\]/);
-  if (!match) {
+  // output format differs across Android versions, e.g.:
+  // "Success: [123]" or "Success: created install session [123]"
+  if (!/Success/i.test(createOut)) {
     throw new Error(`install-create failed: ${createOut.trim()}`);
+  }
+  const match = createOut.match(/\[(\d+)\]/);
+  if (!match) {
+    throw new Error(`install-create: no session id in output: ${createOut.trim()}`);
   }
   const sessionId = match[1];
 
