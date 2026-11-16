@@ -8,7 +8,6 @@ import {
   webUsbSupported,
   type DeviceInfo,
 } from './adb/connection';
-
 import { installApk } from './adb/install';
 import {
   addToBatteryWhitelist,
@@ -20,30 +19,27 @@ import {
   verifyAccessibility,
 } from './adb/grants';
 import { detectClient, type ClientDef } from './clients';
+import { detectLang, STRINGS, type Lang } from './i18n';
 import './App.css';
 
-// User-facing UI strings are Russian (per project conventions);
-// technical log lines below are English.
+// Technical log lines are English; all user-facing UI strings come from i18n.
 
 type Phase = 'idle' | 'working' | 'done' | 'error';
 
 interface StepState {
-  name: string;
   status: 'pending' | 'running' | 'ok' | 'warn' | 'error';
   detail?: string;
 }
 
-const STEP_NAMES = [
-  'Установка APK (атрибуция Play Store)',
-  'Разрешения (микрофон, гео, уведомления...)',
-  'Спец-доступы (appops)',
-  'Доступ к уведомлениям',
-  'Белый список батареи',
-  'Accessibility (управление с магнитолы)',
-  'Запуск приложения',
-];
-
 export default function App() {
+  const [lang, setLang] = useState<Lang>(detectLang);
+  const t = STRINGS[lang];
+
+  useEffect(() => {
+    document.title = t.title;
+    document.documentElement.lang = lang;
+  }, [t.title, lang]);
+
   const [supported] = useState(webUsbSupported());
   const [adb, setAdb] = useState<Adb | null>(null);
   const [device, setDevice] = useState<DeviceInfo | null>(null);
@@ -67,8 +63,7 @@ export default function App() {
   const pickDevice = useCallback(async () => {
     setError(null);
     try {
-      const usbDevice = (await requestDevice())
-        ?? (await getDevices())[0];
+      const usbDevice = (await requestDevice()) ?? (await getDevices())[0];
       if (!usbDevice) return;
       const instance = await connect(usbDevice);
       const info = await readDeviceInfo(instance);
@@ -102,7 +97,7 @@ export default function App() {
     setPhase('working');
     setError(null);
     setUpload({ done: 0, total: apk.size });
-    setSteps(STEP_NAMES.map((name) => ({ name, status: 'pending' })));
+    setSteps(t.steps.map(() => ({ status: 'pending' as const })));
 
     const setStep = (i: number, status: StepState['status'], detail?: string) => {
       updateStep(i, { status, detail });
@@ -125,7 +120,7 @@ export default function App() {
       // 2. runtime permissions
       setStep(1, 'running');
       const grants = await grantRuntimePermissions(adb, client);
-      setStep(1, 'ok', `${grants.permissionsGranted}/${grants.permissionsTotal}`);
+      setStep(1, 'ok', t.detailPermissions(grants.permissionsGranted, grants.permissionsTotal));
       addLog(`permissions granted: ${grants.permissionsGranted}/${grants.permissionsTotal}`);
 
       // 3. appops
@@ -158,10 +153,10 @@ export default function App() {
       await new Promise((r) => setTimeout(r, 4000));
       const bound = await verifyAccessibility(adb, client);
       if (bound) {
-        setStep(6, 'ok', 'touch-back готов');
+        setStep(6, 'ok', t.detailTouchBackOk);
         addLog('accessibility bound (touch-back ready)');
       } else {
-        setStep(6, 'warn', 'включите сервис вручную: Настройки → Спец. возможности');
+        setStep(6, 'warn', t.detailTouchBackWarn);
         addLog('accessibility NOT bound — enable it manually on the phone');
       }
 
@@ -173,49 +168,49 @@ export default function App() {
       setPhase('error');
       addLog(`error: ${e}`);
     }
-  }, [adb, apk, client, addLog, steps]);
+  }, [adb, apk, client, addLog, steps, t]);
 
   const pct = upload.total > 0 ? Math.round((upload.done / upload.total) * 100) : 0;
 
   return (
     <div className="container">
       <header>
-        <div className="kicker">CARBITLINK · YILIAN</div>
-        <h1>Установка с компьютера</h1>
-        <p className="lead">
-          Подключите телефон кабелем, включите «Отладку по USB», выберите APK —
-          программа сама установит его и выдаст все права.
-        </p>
+        <div className="header-row">
+          <div className="kicker">CARBITLINK · YILIAN</div>
+          <div className="lang-switch">
+            {(['ru', 'en'] as Lang[]).map((l) => (
+              <button key={l}
+                className={l === lang ? 'lang active' : 'lang'}
+                onClick={() => setLang(l)}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        <h1>{t.h1}</h1>
+        <p className="lead">{t.lead}</p>
       </header>
 
-      {!supported && (
-        <div className="banner banner-error">
-          Ваш браузер не поддерживает WebUSB. Откройте страницу в Chrome или Edge
-          на компьютере.
-        </div>
-      )}
+      {!supported && <div className="banner banner-error">{t.bannerUnsupported}</div>}
 
       <section className="card">
-        <h2>1 · Телефон</h2>
+        <h2>{t.stepPhone}</h2>
         {device ? (
           <div className="device">
-            <span className="ok">✔</span> {device.model} · Android {device.androidVersion}
+            <span className="ok">✔</span> {device.model} · {t.android} {device.androidVersion}
           </div>
         ) : (
           <div>
             <button onClick={pickDevice} disabled={!supported}>
-              Подключить телефон
+              {t.buttonConnect}
             </button>
-            <p className="hint">
-              На телефоне: Настройки → Для разработчиков → Отладка по USB. Затем
-              подтвердите запрос «Разрешить отладку по USB?».
-            </p>
+            <p className="hint">{t.hintConnect}</p>
           </div>
         )}
       </section>
 
       <section className="card">
-        <h2>2 · APK-файл</h2>
+        <h2>{t.stepApk}</h2>
         <input
           type="file"
           accept=".apk"
@@ -225,20 +220,20 @@ export default function App() {
           <p className="hint">
             {apk.name} · {(apk.size / 1024 / 1024).toFixed(1)} МБ{' '}
             {client
-              ? <span className="ok">— распознан: {client.name}</span>
-              : <span className="warn">— не удалось распознать (carbitlink / yilian)</span>}
+              ? <span className="ok">{t.recognizedAs} {client.name}</span>
+              : <span className="warn">{t.notRecognized}</span>}
           </p>
         )}
       </section>
 
       <section className="card">
-        <h2>3 · Установка</h2>
+        <h2>{t.stepInstall}</h2>
         <button
           className="primary"
           disabled={!adb || !apk || !client || phase === 'working'}
           onClick={run}
         >
-          Установить и настроить
+          {t.buttonInstall}
         </button>
 
         {phase === 'working' && upload.total > 0 && (
@@ -250,8 +245,8 @@ export default function App() {
 
         {steps.length > 0 && (
           <ul className="steps">
-            {steps.map((s) => (
-              <li key={s.name} className={s.status}>
+            {steps.map((s, i) => (
+              <li key={i} className={s.status}>
                 <span className="mark">
                   {s.status === 'ok' && '✔'}
                   {s.status === 'warn' && '!'}
@@ -259,23 +254,19 @@ export default function App() {
                   {s.status === 'running' && '…'}
                   {s.status === 'pending' && '·'}
                 </span>
-                {s.name}
+                {t.steps[i]}
                 {s.detail && <span className="detail"> — {s.detail}</span>}
               </li>
             ))}
           </ul>
         )}
 
-        {phase === 'done' && (
-          <div className="banner banner-ok">
-            Готово! Подключите телефон к магнитоле. Повторный запуск безопасен.
-          </div>
-        )}
+        {phase === 'done' && <div className="banner banner-ok">{t.bannerDone}</div>}
         {error && <div className="banner banner-error">{error}</div>}
       </section>
 
       <details className="log">
-        <summary>Технический лог</summary>
+        <summary>{t.logSummary}</summary>
         <div ref={logRef}>
           {log.map((line, i) => <div key={i}>{line}</div>)}
         </div>

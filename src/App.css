@@ -19,6 +19,26 @@
   letter-spacing: 2px;
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.lang-switch { display: flex; gap: 4px; }
+.lang {
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  color: #838179;
+}
+.lang.active {
+  color: #fff;
+  background: #2f8eae;
+  border-color: #2f8eae;
+  font-weight: 600;
+}
+
 h1 { font-size: 26px; margin: 4px 0 6px; }
 
 .lead { color: #838179; margin: 0 0 20px; line-height: 1.5; }
