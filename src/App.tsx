@@ -19,7 +19,7 @@ import {
   verifyAccessibility,
 } from './adb/grants';
 import { detectClient, type ClientDef } from './clients';
-import { detectLang, STRINGS, type Lang } from './i18n';
+import { detectLang, saveLang, STRINGS, type Lang } from './i18n';
 import './App.css';
 
 // Technical log lines are English; all user-facing UI strings come from i18n.
@@ -181,7 +181,7 @@ export default function App() {
             {(['ru', 'en'] as Lang[]).map((l) => (
               <button key={l}
                 className={l === lang ? 'lang active' : 'lang'}
-                onClick={() => setLang(l)}>
+                onClick={() => { setLang(l); saveLang(l); }}>
                 {l.toUpperCase()}
               </button>
             ))}

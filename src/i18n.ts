@@ -3,9 +3,24 @@
 
 export type Lang = 'ru' | 'en';
 
+const STORAGE_KEY = 'carbitlink-web-setup.lang';
+
+// Manual override persists across visits; otherwise fall back to the
+// browser's preferred languages list (first entry wins).
 export function detectLang(): Lang {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'ru' || saved === 'en') return saved;
   if (typeof navigator === 'undefined') return 'en';
-  return navigator.language?.toLowerCase().startsWith('ru') ? 'ru' : 'en';
+  const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const l of langs) {
+    if (l?.toLowerCase().startsWith('ru')) return 'ru';
+    if (l?.toLowerCase().startsWith('en')) return 'en';
+  }
+  return 'en';
+}
+
+export function saveLang(lang: Lang): void {
+  localStorage.setItem(STORAGE_KEY, lang);
 }
 
 const RU = {
