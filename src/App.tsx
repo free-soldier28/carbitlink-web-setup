@@ -16,7 +16,8 @@ import {
   grantAppops,
   grantRuntimePermissions,
   launchApp,
-  verifyAccessibility,
+  openAccessibilitySettings,
+  waitForAccessibility,
 } from './adb/grants';
 import { detectClient, type ClientDef } from './clients';
 import { detectLang, saveLang, STRINGS, type Lang } from './i18n';
@@ -25,7 +26,7 @@ import './App.css';
 
 // Technical log lines are English; all user-facing UI strings come from i18n.
 
-type Phase = 'idle' | 'working' | 'done' | 'error';
+type Phase = 'idle' | 'working' | 'done' | 'pending' | 'error';
 
 interface StepState {
   status: 'pending' | 'running' | 'ok' | 'warn' | 'error';
@@ -107,6 +108,54 @@ export default function App() {
     setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   };
 
+  // Enable accessibility, launch, and verify. Safe to call on its own: on some
+  // Android builds the service only binds after the app was started once, so a
+  // plain retry fixes it without reinstalling the APK.
+  const finalize = useCallback(async () => {
+    if (!adb || !client) return;
+    setPhase('working');
+    setInstallError(null);
+    let current = 5;
+    const setStep = (i: number, status: StepState['status'], detail?: string) => {
+      updateStep(i, { status, detail });
+    };
+
+    try {
+      setStep(current, 'running');
+      await enableAccessibility(adb, client);
+      setStep(current, 'ok');
+      addLog('accessibility settings written');
+
+      current = 6;
+      setStep(current, 'running');
+      const launch = await launchApp(adb, client);
+      addLog(`launch: ${launch.detail}`);
+      if (!launch.launched) {
+        setStep(current, 'error', t.detailLaunchFail);
+      } else {
+        setStep(current, 'ok');
+        addLog('app process running');
+      }
+
+      // Re-apply and poll: the service may need a running app process to bind.
+      const bound = await waitForAccessibility(adb, client, 8, 1000);
+      if (bound) {
+        setStep(5, 'ok', t.detailTouchBackOk);
+        addLog('accessibility bound (touch-back ready)');
+      } else {
+        setStep(5, 'warn', t.detailTouchBackWarn);
+        addLog('accessibility NOT bound — enable it manually on the phone');
+      }
+
+      setPhase(bound && launch.launched ? 'done' : 'pending');
+    } catch (e) {
+      setStep(current, 'error', String(e));
+      setInstallError(String(e));
+      setPhase('error');
+      addLog(`error: ${e}`);
+    }
+  }, [adb, client, addLog, t]);
+
   const run = useCallback(async () => {
     if (!adb || !apk || !client) return;
     setPhase('working');
@@ -156,34 +205,17 @@ export default function App() {
       setStep(4, 'ok');
       addLog('battery whitelist: added');
 
-      // 6. accessibility
-      setStep(5, 'running');
-      await enableAccessibility(adb, client);
-      setStep(5, 'ok');
-      addLog('accessibility service enabled');
-
-      // 7. launch + verify
-      setStep(6, 'running');
-      await launchApp(adb, client);
-      await new Promise((r) => setTimeout(r, 4000));
-      const bound = await verifyAccessibility(adb, client);
-      if (bound) {
-        setStep(6, 'ok', t.detailTouchBackOk);
-        addLog('accessibility bound (touch-back ready)');
-      } else {
-        setStep(6, 'warn', t.detailTouchBackWarn);
-        addLog('accessibility NOT bound — enable it manually on the phone');
-      }
-
-      setPhase('done');
     } catch (e) {
       const stepIndex = steps.findIndex((s) => s.status === 'running');
       if (stepIndex >= 0) setStep(stepIndex, 'error', String(e));
       setInstallError(String(e));
       setPhase('error');
       addLog(`error: ${e}`);
+      return;
     }
-  }, [adb, apk, client, addLog, steps, t]);
+
+    await finalize();
+  }, [adb, apk, client, addLog, steps, t, finalize]);
 
   const pct = upload.total > 0 ? Math.round((upload.done / upload.total) * 100) : 0;
 
@@ -290,6 +322,17 @@ export default function App() {
         )}
 
         {phase === 'done' && <div className="banner banner-ok">{t.bannerDone}</div>}
+        {phase === 'pending' && (
+          <div className="banner banner-warn">
+            <div>{t.bannerPending}</div>
+            <div className="banner-actions">
+              <button className="primary" onClick={finalize}>{t.buttonRetry}</button>
+              <button onClick={() => { void openAccessibilitySettings(adb!); }}>
+                {t.buttonOpenA11y}
+              </button>
+            </div>
+          </div>
+        )}
         {installError && <div className="banner banner-error">{installError}</div>}
       </section>
 

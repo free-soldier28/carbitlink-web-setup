@@ -149,6 +149,8 @@ input[type='file']::file-selector-button {
 }
 .banner-ok { background: var(--banner-ok-bg); border: 1px solid var(--banner-ok-border); }
 .banner-error { background: var(--banner-err-bg); border: 1px solid var(--banner-err-border); }
+.banner-warn { background: var(--card-bg); border: 1px solid var(--warn); }
+.banner-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 
 .progress { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .progress .bar {

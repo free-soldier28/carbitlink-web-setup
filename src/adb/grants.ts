@@ -12,15 +12,31 @@ export interface GrantResult {
   permissionsTotal: number;
 }
 
-export async function grantRuntimePermissions(adb: Adb, client: ClientDef): Promise<GrantResult> {
-  let granted = 0;
+// Count permissions actually granted for user 0 in a `pm dump <pkg>` output.
+// Reliable across Android versions: the exit code of `pm grant` alone can be
+// misleading (already-granted / platform permissions), so the final state is
+// read back from the package manager.
+export function countGrantedPermissions(dump: string): number {
+  const user0 = dump.match(/User 0:[\s\S]*?(?=\n\s*User \d+:|$)/)?.[0] ?? dump;
+  const runtime = user0.split('runtime permissions:')[1] ?? '';
+  let count = 0;
   for (const perm of RUNTIME_PERMISSIONS) {
-    const result = await shell(adb, `pm grant --user 0 ${client.pkg} ${perm}`)
-      .catch(() => null);
-    // exitCode === 0 → granted; failures (unknown permission on this Android) are fine
-    if (result && result.exitCode === 0) granted++;
+    const escaped = perm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b[^\\n]*granted=true`).test(runtime)) count++;
   }
-  return { permissionsGranted: granted, permissionsTotal: RUNTIME_PERMISSIONS.length };
+  return count;
+}
+
+export async function grantRuntimePermissions(adb: Adb, client: ClientDef): Promise<GrantResult> {
+  for (const perm of RUNTIME_PERMISSIONS) {
+    // Failures (unknown permission on this Android version) are fine.
+    await shell(adb, `pm grant --user 0 ${client.pkg} ${perm}`).catch(() => null);
+  }
+  const dump = await shellText(adb, `pm dump ${client.pkg}`).catch(() => '');
+  return {
+    permissionsGranted: countGrantedPermissions(dump),
+    permissionsTotal: RUNTIME_PERMISSIONS.length,
+  };
 }
 
 export async function grantAppops(adb: Adb, client: ClientDef): Promise<void> {
@@ -54,12 +70,74 @@ export async function enableAccessibility(adb: Adb, client: ClientDef): Promise<
   await shellBestEffort(adb, 'settings put secure accessibility_enabled 1');
 }
 
-export async function launchApp(adb: Adb, client: ClientDef): Promise<void> {
-  await shellBestEffort(adb, `monkey -p ${client.pkg} -c android.intent.category.LAUNCHER 1`);
+// Resolve the launcher activity; use it with `am start` (more reliable than
+// monkey on modern Android where the app can be in a "stopped" state).
+export async function resolveLauncherActivity(adb: Adb, pkg: string): Promise<string | null> {
+  const out = await shellText(
+    adb,
+    `cmd package resolve-activity --brief -c android.intent.category.LAUNCHER ${pkg}`,
+  ).catch(() => '');
+  const line = out.split('\n').map((s) => s.trim()).find((s) => s.includes('/'));
+  return line ?? null;
+}
+
+export interface LaunchResult {
+  launched: boolean;
+  detail: string;
+}
+
+export async function launchApp(adb: Adb, client: ClientDef): Promise<LaunchResult> {
+  const component = await resolveLauncherActivity(adb, client.pkg);
+  let detail = '';
+  if (component) {
+    const started = await shell(adb, `am start -n ${component}`).catch(() => null);
+    detail = `am start: ${started ? started.exitCode : 'no response'}`;
+    if (!started || started.exitCode !== 0) {
+      const monkey = await shell(
+        adb,
+        `monkey -p ${client.pkg} -c android.intent.category.LAUNCHER 1`,
+      ).catch(() => null);
+      detail += `; monkey: ${monkey ? monkey.exitCode : 'no response'}`;
+    }
+  } else {
+    const monkey = await shell(
+      adb,
+      `monkey -p ${client.pkg} -c android.intent.category.LAUNCHER 1`,
+    ).catch(() => null);
+    detail = `monkey (no launcher resolved): ${monkey ? monkey.exitCode : 'no response'}`;
+  }
+
+  // A freshly installed app can be in a stopped state; give the process time.
+  await new Promise((r) => setTimeout(r, 2000));
+  const pid = await shellText(adb, `pidof ${client.pkg}`).catch(() => '');
+  return {
+    launched: pid.trim().length > 0,
+    detail: `${detail} (pidof: ${pid.trim() || 'none'})`,
+  };
+}
+
+// Open the system accessibility page so the user can enable the service when
+// Android blocks programmatic enablement (restricted settings on Android 13+).
+export async function openAccessibilitySettings(adb: Adb): Promise<void> {
+  await shellBestEffort(adb, 'am start -a android.settings.ACCESSIBILITY_SETTINGS');
 }
 
 // True when the accessibility service got bound (touch-back ready).
 export async function verifyAccessibility(adb: Adb, client: ClientDef): Promise<boolean> {
   const dump = await shellText(adb, 'dumpsys accessibility').catch(() => '');
   return dump.includes(client.accessibilityService);
+}
+
+// Binding can lag behind the settings write; poll a few times before giving up.
+export async function waitForAccessibility(
+  adb: Adb,
+  client: ClientDef,
+  attempts = 6,
+  delayMs = 1000,
+): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
+    if (await verifyAccessibility(adb, client)) return true;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
 }
