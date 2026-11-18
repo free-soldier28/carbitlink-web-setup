@@ -138,10 +138,38 @@ export async function collectLaunchDiagnostics(adb: Adb, client: ClientDef): Pro
   return log.trim() || 'logcat returned no matching lines';
 }
 
-// Open the system accessibility page so the user can enable the service when
-// Android blocks programmatic enablement (restricted settings on Android 13+).
-export async function openAccessibilitySettings(adb: Adb): Promise<void> {
-  await shellBestEffort(adb, 'am start -a android.settings.ACCESSIBILITY_SETTINGS');
+// Open the details page for THIS client's accessibility service — the user
+// often enables the other client's service by mistake (Yilian vs CarBitLink).
+export async function openAccessibilitySettings(adb: Adb, client: ClientDef): Promise<void> {
+  const detail = await shell(
+    adb,
+    `am start -a android.settings.ACCESSIBILITY_DETAILS_SETTINGS -d package:${client.accessibilityService}`,
+  ).catch(() => null);
+  if (!detail || /error|not found|no activity/i.test(detail.stdout)) {
+    await shellBestEffort(adb, 'am start -a android.settings.ACCESSIBILITY_SETTINGS');
+  }
+}
+
+// On Android 13+ a sideloaded app can be "restricted": its accessibility toggle
+// stays disabled until the user allows restricted settings in App info.
+export async function openAppInfoSettings(adb: Adb, client: ClientDef): Promise<void> {
+  await shellBestEffort(
+    adb,
+    `am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:${client.pkg}`,
+  );
+}
+
+export async function getAccessibilityDiagnostics(adb: Adb): Promise<string> {
+  const setting = await shellText(adb, 'settings get secure enabled_accessibility_services')
+    .catch(() => '?');
+  const enabled = await shellText(adb, 'settings get secure accessibility_enabled')
+    .catch(() => '?');
+  const dump = await shellText(adb, 'dumpsys accessibility').catch(() => '');
+  const sections = dump.split('\n')
+    .filter((line) => /Bound services:|Enabled services:/.test(line))
+    .slice(0, 8)
+    .join('\n');
+  return `a11y setting: ${setting.trim()}\na11y_enabled: ${enabled.trim()}\n${sections}`;
 }
 
 // True only when the service is really bound. `dumpsys accessibility` lists

@@ -14,10 +14,12 @@ import {
   collectLaunchDiagnostics,
   enableAccessibility,
   enableNotificationListener,
+  getAccessibilityDiagnostics,
   grantAppops,
   grantRuntimePermissions,
   launchApp,
   openAccessibilitySettings,
+  openAppInfoSettings,
   waitForAccessibility,
 } from './adb/grants';
 import { detectClient, type ClientDef } from './clients';
@@ -127,8 +129,13 @@ export default function App() {
       setStep(current, 'ok');
       addLog('accessibility settings written');
 
-      // Wait for a real binding BEFORE launching: the patched client refuses to
-      // start until SendService is connected.
+      // First launch brings the app out of the "stopped" state so the system
+      // is willing to bind its accessibility service.
+      current = 6;
+      setStep(current, 'running');
+      let launch = await launchApp(adb, client);
+      addLog(`warm-up launch: ${launch.detail}`);
+
       const bound = await waitForAccessibility(adb, client, 8, 1000);
       if (bound) {
         setStep(5, 'ok', t.detailTouchBackOk);
@@ -136,16 +143,12 @@ export default function App() {
       } else {
         setStep(5, 'warn', t.detailTouchBackWarn);
         addLog('accessibility NOT bound — enable it manually on the phone');
+        (await getAccessibilityDiagnostics(adb))
+          .split('\n').filter(Boolean).forEach(addLog);
       }
 
-      current = 6;
-      setStep(current, 'running');
-      let launch = await launchApp(adb, client);
-      addLog(`launch: ${launch.detail}`);
-
-      // If the process died, re-apply accessibility and try once more — some
-      // builds only bind the service on the second start.
-      if (!launch.launched) {
+      // If the app died (it needs the bound service), re-apply and relaunch.
+      if (!launch.launched || bound) {
         await enableAccessibility(adb, client);
         addLog('re-applying accessibility settings, retrying launch');
         launch = await launchApp(adb, client);
@@ -162,7 +165,7 @@ export default function App() {
         addLog('app process running');
       }
 
-      setPhase(bound && launch.launched ? 'done' : 'pending');
+      setPhase(launch.launched && bound ? 'done' : 'pending');
     } catch (e) {
       setStep(current, 'error', String(e));
       setInstallError(String(e));
@@ -342,8 +345,15 @@ export default function App() {
             <div>{t.bannerPending}</div>
             <div className="banner-actions">
               <button className="primary" onClick={finalize}>{t.buttonRetry}</button>
-              <button onClick={() => { void openAccessibilitySettings(adb!); }}>
+              <button onClick={() => {
+                if (adb && client) void openAccessibilitySettings(adb, client);
+              }}>
                 {t.buttonOpenA11y}
+              </button>
+              <button onClick={() => {
+                if (adb && client) void openAppInfoSettings(adb, client);
+              }}>
+                {t.buttonAppInfo}
               </button>
             </div>
           </div>
