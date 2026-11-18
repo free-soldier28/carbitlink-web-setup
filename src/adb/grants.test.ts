@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { countGrantedPermissions, mergeAccessibilityService, waitForAccessibility } from './grants';
+import {
+  countGrantedPermissions,
+  isProcessRunning,
+  mergeAccessibilityService,
+  parseAccessibilityBound,
+  waitForAccessibility,
+} from './grants';
 import type { ClientDef } from '../clients';
 
 const shellTextMock = vi.fn<(adb: never, command: string) => Promise<string>>();
@@ -60,6 +66,44 @@ describe('countGrantedPermissions', () => {
   });
 });
 
+describe('parseAccessibilityBound', () => {
+  const realDump = `
+    User 0:
+      attributes:{id=0, touchExplorationEnabled=false}
+      Bound services:{Service[label=Yilian Driving Assistant, feedbackType[FEEDBACK_GENERIC]]}
+      Enabled services:{{${SVC}}}
+    User 999:
+      attributes:{id=999, touchExplorationEnabled=false}
+      Bound services:{}
+      Enabled services:{}
+  `;
+
+  it('detects a bound service only when Enabled and Bound belong to the same block', () => {
+    expect(parseAccessibilityBound(realDump, SVC)).toBe(true);
+  });
+
+  it('does not report bound when only the enabled setting is present', () => {
+    const enabledOnly = `attributes:{id=0}\nBound services:{}\nEnabled services:{{${SVC}}}`;
+    expect(parseAccessibilityBound(enabledOnly, SVC)).toBe(false);
+  });
+
+  it('does not pick a bound service from another service', () => {
+    const other = realDump.replace(SVC, 'com.other/Service');
+    expect(parseAccessibilityBound(other, SVC)).toBe(false);
+  });
+});
+
+describe('isProcessRunning', () => {
+  it('finds the package in a dumpsys process line', () => {
+    const dump = `Proc #12: adj=prcp net.easyconn.carman/10012 (top-activity)\nProc #13: adj=bg com.other/10013`;
+    expect(isProcessRunning(dump, 'net.easyconn.carman')).toBe(true);
+  });
+
+  it('returns false when the package is absent', () => {
+    expect(isProcessRunning('Proc #1: adj=bg com.other/1001', 'net.easyconn.carman')).toBe(false);
+  });
+});
+
 describe('waitForAccessibility', () => {
   const client = { accessibilityService: SVC } as ClientDef;
   const adb = {} as never;
@@ -72,16 +116,17 @@ describe('waitForAccessibility', () => {
     }) as never);
   });
 
-  it('returns true as soon as the service appears in dumpsys', async () => {
+  it('returns true as soon as the service is really bound', async () => {
+    const bound = `attributes:{id=0}\nBound services:{Service[${SVC}]}\nEnabled services:{{${SVC}}}`;
     shellTextMock
-      .mockResolvedValueOnce('Enabled services:{}')
-      .mockResolvedValueOnce(`Bound services:{Service[${SVC}]}`);
+      .mockResolvedValueOnce('attributes:{id=0}\nBound services:{}\nEnabled services:{}')
+      .mockResolvedValueOnce(bound);
     expect(await waitForAccessibility(adb, client, 3, 0)).toBe(true);
     expect(shellTextMock).toHaveBeenCalledTimes(2);
   });
 
   it('polls up to the attempt limit when the service never binds', async () => {
-    shellTextMock.mockResolvedValue('Enabled services:{}');
+    shellTextMock.mockResolvedValue('attributes:{id=0}\nBound services:{}\nEnabled services:{}');
     expect(await waitForAccessibility(adb, client, 3, 0)).toBe(false);
     expect(shellTextMock).toHaveBeenCalledTimes(3);
   });

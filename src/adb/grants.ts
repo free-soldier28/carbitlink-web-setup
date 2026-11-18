@@ -86,34 +86,56 @@ export interface LaunchResult {
   detail: string;
 }
 
+// `pidof` is missing on some vendor ROMs; `dumpsys activity processes` always
+// exists and reports running processes as "Proc #N: ... <pkg>/...".
+export function isProcessRunning(procDump: string, pkg: string): boolean {
+  return new RegExp(`Proc\\s+#\\d+:[^\\n]*\\b${pkg.replace(/\./g, '\\.')}\\b`).test(procDump);
+}
+
+export async function appIsRunning(adb: Adb, pkg: string): Promise<string> {
+  const pid = (await shellText(adb, `pidof ${pkg}`).catch(() => '')).trim();
+  if (pid) return `pidof: ${pid}`;
+  const procDump = await shellText(adb, 'dumpsys activity processes').catch(() => '');
+  if (isProcessRunning(procDump, pkg)) return 'dumpsys: running';
+  return 'no process';
+}
+
 export async function launchApp(adb: Adb, client: ClientDef): Promise<LaunchResult> {
   const component = await resolveLauncherActivity(adb, client.pkg);
   let detail = '';
   if (component) {
     const started = await shell(adb, `am start -n ${component}`).catch(() => null);
-    detail = `am start: ${started ? started.exitCode : 'no response'}`;
-    if (!started || started.exitCode !== 0) {
+    // am start returns 0 even on "Activity not started" — keep the actual output.
+    const out = (started?.stdout ?? '').trim().replace(/\s+/g, ' ').slice(0, 300);
+    detail = `am start exit=${started ? started.exitCode : 'none'}${out ? ` [${out}]` : ''}`;
+    if (!started || started.exitCode !== 0 || /error|not started|denied/i.test(out)) {
       const monkey = await shell(
         adb,
         `monkey -p ${client.pkg} -c android.intent.category.LAUNCHER 1`,
       ).catch(() => null);
-      detail += `; monkey: ${monkey ? monkey.exitCode : 'no response'}`;
+      detail += `; monkey=${monkey ? monkey.exitCode : 'none'}`;
     }
   } else {
     const monkey = await shell(
       adb,
       `monkey -p ${client.pkg} -c android.intent.category.LAUNCHER 1`,
     ).catch(() => null);
-    detail = `monkey (no launcher resolved): ${monkey ? monkey.exitCode : 'no response'}`;
+    detail = `monkey (no launcher resolved)=${monkey ? monkey.exitCode : 'none'}`;
   }
 
-  // A freshly installed app can be in a stopped state; give the process time.
-  await new Promise((r) => setTimeout(r, 2000));
-  const pid = await shellText(adb, `pidof ${client.pkg}`).catch(() => '');
-  return {
-    launched: pid.trim().length > 0,
-    detail: `${detail} (pidof: ${pid.trim() || 'none'})`,
-  };
+  await new Promise((r) => setTimeout(r, 2500));
+  const running = await appIsRunning(adb, client.pkg);
+  return { launched: running !== 'no process', detail: `${detail} (${running})` };
+}
+
+// Pull the actual crash reason when the app dies right after launch.
+export async function collectLaunchDiagnostics(adb: Adb, client: ClientDef): Promise<string> {
+  const filter = `(${client.pkg}|AndroidRuntime|FATAL|ActivityManager|AccessibilityService)`;
+  const log = await shellText(
+    adb,
+    `logcat -d -t 200 | grep -iE "${filter}" | tail -60`,
+  ).catch(() => '');
+  return log.trim() || 'logcat returned no matching lines';
 }
 
 // Open the system accessibility page so the user can enable the service when
@@ -122,10 +144,28 @@ export async function openAccessibilitySettings(adb: Adb): Promise<void> {
   await shellBestEffort(adb, 'am start -a android.settings.ACCESSIBILITY_SETTINGS');
 }
 
-// True when the accessibility service got bound (touch-back ready).
+// True only when the service is really bound. `dumpsys accessibility` lists
+// configured services under "Enabled services" even when the app is dead —
+// checking the whole dump gives a false "bound". Look at the Bound section.
+export function parseAccessibilityBound(dump: string, service: string): boolean {
+  // dumpsys groups data per user/display into "attributes:{...}" blocks, each
+  // with its own Bound/Enabled services. Pair them so a bound service from
+  // another user cannot be mistaken for ours.
+  const blocks = dump.split(/attributes:\{/).slice(1);
+  for (const block of blocks) {
+    const bound = block.match(/Bound services:\{([\s\S]*?)\}/);
+    if (!bound || !/Service\[/i.test(bound[1])) continue;
+    const enabled = block.match(/Enabled services:\{([\s\S]*?)\}/);
+    if (enabled && enabled[1].includes(service)) return true;
+  }
+  // Fallback for dump formats without attributes blocks.
+  const anyBound = /Bound services:\{([\s\S]*?)\}/.exec(dump);
+  return !!anyBound && /Service\[/i.test(anyBound[1]) && dump.includes(service);
+}
+
 export async function verifyAccessibility(adb: Adb, client: ClientDef): Promise<boolean> {
   const dump = await shellText(adb, 'dumpsys accessibility').catch(() => '');
-  return dump.includes(client.accessibilityService);
+  return parseAccessibilityBound(dump, client.accessibilityService);
 }
 
 // Binding can lag behind the settings write; poll a few times before giving up.

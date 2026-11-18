@@ -11,6 +11,7 @@ import {
 import { installApk } from './adb/install';
 import {
   addToBatteryWhitelist,
+  collectLaunchDiagnostics,
   enableAccessibility,
   enableNotificationListener,
   grantAppops,
@@ -126,18 +127,8 @@ export default function App() {
       setStep(current, 'ok');
       addLog('accessibility settings written');
 
-      current = 6;
-      setStep(current, 'running');
-      const launch = await launchApp(adb, client);
-      addLog(`launch: ${launch.detail}`);
-      if (!launch.launched) {
-        setStep(current, 'error', t.detailLaunchFail);
-      } else {
-        setStep(current, 'ok');
-        addLog('app process running');
-      }
-
-      // Re-apply and poll: the service may need a running app process to bind.
+      // Wait for a real binding BEFORE launching: the patched client refuses to
+      // start until SendService is connected.
       const bound = await waitForAccessibility(adb, client, 8, 1000);
       if (bound) {
         setStep(5, 'ok', t.detailTouchBackOk);
@@ -145,6 +136,30 @@ export default function App() {
       } else {
         setStep(5, 'warn', t.detailTouchBackWarn);
         addLog('accessibility NOT bound — enable it manually on the phone');
+      }
+
+      current = 6;
+      setStep(current, 'running');
+      let launch = await launchApp(adb, client);
+      addLog(`launch: ${launch.detail}`);
+
+      // If the process died, re-apply accessibility and try once more — some
+      // builds only bind the service on the second start.
+      if (!launch.launched) {
+        await enableAccessibility(adb, client);
+        addLog('re-applying accessibility settings, retrying launch');
+        launch = await launchApp(adb, client);
+        addLog(`launch retry: ${launch.detail}`);
+      }
+
+      if (!launch.launched) {
+        setStep(current, 'error', t.detailLaunchFail);
+        const diagnostics = await collectLaunchDiagnostics(adb, client);
+        diagnostics.split('\n').filter(Boolean).forEach(addLog);
+        addLog('--- end of logcat ---');
+      } else {
+        setStep(current, 'ok');
+        addLog('app process running');
       }
 
       setPhase(bound && launch.launched ? 'done' : 'pending');
