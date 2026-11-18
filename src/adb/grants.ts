@@ -70,6 +70,21 @@ export async function enableAccessibility(adb: Adb, client: ClientDef): Promise<
   await shellBestEffort(adb, 'settings put secure accessibility_enabled 1');
 }
 
+// A plain `settings put` often does not make AccessibilityManagerService bind
+// the service on OEM ROMs (ColorOS/realme UI). Toggling accessibility_enabled
+// forces the system to re-read the setting and bind everything listed there.
+export async function forceBindAccessibility(adb: Adb, client: ClientDef): Promise<void> {
+  const cur = await shellText(adb, 'settings get secure enabled_accessibility_services');
+  const next = mergeAccessibilityService(cur, client.accessibilityService);
+
+  await shellBestEffort(adb, 'settings put secure accessibility_enabled 0');
+  await new Promise((r) => setTimeout(r, 400));
+  await shellBestEffort(adb, `settings put secure enabled_accessibility_services ${next}`);
+  await shellBestEffort(adb, 'settings put secure accessibility_enabled 1');
+  // Nudge listeners; harmless when the broadcast is not handled.
+  await shellBestEffort(adb, 'am broadcast -a android.intent.action.ACCESSIBILITY_SETTINGS_CHANGED');
+}
+
 // Resolve the launcher activity; use it with `am start` (more reliable than
 // monkey on modern Android where the app can be in a "stopped" state).
 export async function resolveLauncherActivity(adb: Adb, pkg: string): Promise<string | null> {

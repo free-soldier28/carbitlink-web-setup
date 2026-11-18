@@ -14,6 +14,7 @@ import {
   collectLaunchDiagnostics,
   enableAccessibility,
   enableNotificationListener,
+  forceBindAccessibility,
   getAccessibilityDiagnostics,
   grantAppops,
   grantRuntimePermissions,
@@ -136,7 +137,12 @@ export default function App() {
       let launch = await launchApp(adb, client);
       addLog(`warm-up launch: ${launch.detail}`);
 
-      const bound = await waitForAccessibility(adb, client, 8, 1000);
+      let bound = await waitForAccessibility(adb, client, 8, 1000);
+      if (!bound) {
+        addLog('accessibility not bound — forcing settings re-read');
+        await forceBindAccessibility(adb, client);
+        bound = await waitForAccessibility(adb, client, 8, 1000);
+      }
       if (bound) {
         setStep(5, 'ok', t.detailTouchBackOk);
         addLog('accessibility bound (touch-back ready)');
